@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merchant onboarding</title>
+<style>
+:root{font:15px system-ui,sans-serif;color:#162638;background:#eef3f5}
+body{margin:0}header{background:#122c3d;color:white;padding:32px max(20px,calc((100% - 1120px)/2))}
+h1{margin:0;font-size:2rem}h2{font-size:1.15rem;margin:.15rem 0 1rem}h3{font-size:1rem}
+main{max-width:1120px;margin:24px auto;padding:0 20px}
+section{background:white;border:1px solid #d4e1e6;border-radius:12px;padding:18px;margin:0 0 15px;min-width:0}
+.layout{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:flex;flex-direction:column;gap:4px;margin:0 0 10px;font-weight:600}
+input,select,textarea,button{font:inherit;border:1px solid #9eb3bd;border-radius:6px;padding:8px}
+textarea{min-height:80px;resize:vertical;font-family:ui-monospace,monospace;font-size:.84rem}
+button{background:#0e655e;color:white;padding:8px 13px;cursor:pointer;margin:0 4px 5px 0}
+button:hover{background:#0a4a45}button:disabled{opacity:.55;cursor:wait}
+nav{margin-bottom:14px}a{color:#0e655e}header a{color:#b7f1e8}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #dce9ed}
+td button{margin:0}pre{white-space:pre-wrap;word-break:break-word;max-height:430px;overflow:auto;background:#f2f6f8;padding:12px;border-radius:6px}
+#status{min-height:1.4rem;font-weight:600}.error{color:#a82624}details{margin:8px 0}summary{cursor:pointer}
+@media(max-width:820px){.layout{grid-template-columns:1fr}td{overflow-wrap:anywhere}}
+</style>
+</head>
+<body>
+<header><h1>Merchant onboarding</h1><p>Local demo · <a href="/docs">API reference</a></p></header>
+<main>
+<p id="status" role="status" aria-live="polite"></p>
+<div class="layout">
+<div>
+<section>
+<h2>Operator console</h2>
+<label>Demo identity<select id="operator"><option value="admin">Admin</option><option value="admin-2">Second admin</option><option value="reviewer-1">Reviewer 1</option><option value="reviewer-2">Reviewer 2</option></select></label>
+<label>Scenario<select id="scenario">
+<option value="happy_pvt_ltd">Straight-through approval</option><option value="gst_cancelled">Cancelled GST registration</option>
+<option value="blurred_cheque">Unreadable bank document</option><option value="pan_conflict">PAN conflict</option>
+<option value="late_callback">Late bank callback</option><option value="bank_change">Settlement bank change</option>
+<option value="mid_failure">MID provisioning failure</option><option value="high_risk_mcc_pep">Risk review</option>
+<option value="duplicate_active">Duplicate active merchant</option></select></label>
+<button id="run">Run scenario</button>
+<h3>Applications</h3>
+<label>Search<input id="query" placeholder="Legal name or reference"></label>
+<button id="queue">Refresh queue</button>
+<div id="queue-list"></div>
+</section>
+<section><h2>Review</h2><label>Task ID<input id="task"></label>
+<button id="claim">Claim task</button>
+<label>Decision<select id="decision"><option>APPROVE</option><option>REJECT</option><option>REQUEST_INFO</option><option>RERUN_CHECKS</option><option>MERGE</option><option>ESCALATE</option><option>CONFIRM</option></select></label>
+<label>Reason codes<input id="reason" placeholder="Comma-separated codes"></label>
+<label>Notes<textarea id="notes"></textarea></label>
+<details><summary>Information items or other action parameters</summary><label>Additional JSON<textarea id="review-extra">{}</textarea></label></details>
+<button id="decide">Save decision</button><button id="retry">Retry MID and clear simulated fault</button>
+</section>
+<section><h2>Operations</h2><button id="metrics">Metrics</button><button id="audit">Verify audit</button><button id="dead">Dead letters</button>
+<details><summary>Admin policy</summary><button id="config-read">Load configuration</button>
+<label>JSON changes<textarea id="config-value">{}</textarea></label><button id="config-save">Save configuration</button></details>
+<pre id="reports" hidden></pre></section>
+</div>
+<div>
+<section>
+<h2>Merchant portal</h2>
+<label>Merchant identity<input id="merchant" value="demo-merchant"></label>
+<label>Application ID<input id="application-id"></label>
+<button id="merchant-read">Load status</button><button id="submit">Submit draft</button><button id="withdraw">Withdraw</button>
+<details><summary>Create a draft or submit requested updates</summary>
+<label>Application fields or response JSON<textarea id="merchant-json">{}</textarea></label>
+<button id="draft">Create draft</button><button id="respond">Respond to request</button><button id="bank-change">Request bank change</button>
+<label>Document type<input id="doc-type" value="BANK_PROOF"></label>
+<label>Optional PDF, JPEG, or PNG<input type="file" id="doc-file" accept="application/pdf,image/jpeg,image/png"></label>
+<button id="upload">Upload document using JSON fields</button></details>
+<pre id="merchant-output" hidden></pre>
+</section>
+<section><h2>Application detail</h2><button id="detail">Load detail</button>
+<p id="summary"></p><ol id="timeline" aria-label="Application timeline"></ol>
+<div id="evidence"></div>
+</section>
+</div>
+</div>
+</main>
+<script>
+const el = id => document.getElementById(id);
+const appId = () => encodeURIComponent(el("application-id").value.trim());
+const taskId = () => encodeURIComponent(el("task").value.trim());
+const opsPath = () => "/ops/applications/" + appId();
+const merchantPath = () => "/applications/" + appId();
+const display = value => JSON.stringify(value, null, 2);
+const formJson = id => JSON.parse(el(id).value || "{}");
+let infoId = null;
+let streamController = null;
+
+function headers(merchant) {
+  const user = el(merchant ? "merchant" : "operator").value;
+  return {"X-User-Id": user, "X-Role": merchant ? "merchant" : user.startsWith("admin") ? "ops_admin" : "ops_reviewer"};
+}
+async function call(path, method="GET", data, merchant=false) {
+  const requestHeaders = headers(merchant);
+  if (method !== "GET") requestHeaders["Idempotency-Key"] = crypto.randomUUID();
+  if (data !== undefined && !(data instanceof FormData)) {
+    requestHeaders["Content-Type"] = "application/json";
+    data = JSON.stringify(data);
+  }
+  const response = await fetch("/api/v1" + path, {method, headers:requestHeaders, body:data});
+  const value = await response.json();
+  if (!response.ok) throw Error(value.error?.message || "The request failed.");
+  return value;
+}
+function show(id, value) {
+  el(id).textContent = display(value);
+  el(id).hidden = false;
+}
+function node(tag, value) {
+  const element = document.createElement(tag);
+  element.textContent = value;
+  return element;
+}
+async function selectApp(id) {
+  el("application-id").value = id;
+  el("task").value = "";
+  infoId = null;
+  await refreshDetail();
+  stream(id);
+}
+async function refreshQueue() {
+  const rows = await call("/ops/applications?q=" + encodeURIComponent(el("query").value));
+  const table = node("table", "");
+  const header = table.insertRow();
+  for (const text of ["Reference", "Merchant", "State"]) header.append(node("th", text));
+  for (const app of rows) {
+    const row = table.insertRow();
+    const button = node("button", app.reference_no);
+    button.onclick = () => act(() => selectApp(app.id));
+    row.insertCell().append(button);
+    row.insertCell().textContent = app.legal_name;
+    row.insertCell().textContent = app.state;
+  }
+  el("queue-list").replaceChildren(table);
+}
+async function refreshDetail() {
+  const selected = appId();
+  if (!selected) return;
+  const data = await call(opsPath());
+  if (selected !== appId()) return;
+  el("summary").textContent = data.application.reference_no + " · " + data.application.state;
+  el("timeline").replaceChildren(...data.transitions.map(item => node("li", item.to_state)));
+  const task = data.tasks.find(task => !["DECIDED", "CANCELLED"].includes(task.status));
+  el("task").value = task?.id || "";
+  const entries = {
+    "Open review tasks": data.tasks,
+    "Exceptions": data.exceptions,
+    "Verification and callbacks": {checks:data.checks, callbacks:data.callbacks},
+    "Documents and extracted fields": {documents:data.documents, fields:data.fields, reconciliation:data.reconciliation},
+    "Masked application": data.form,
+    "Provisioning and changes": {provisioning:data.provisioning, changes:data.changes},
+    "Notifications": data.notifications,
+    "Audit trail": data.audit,
+    "Recorded events and decision trace": data.events,
+  };
+  const opened = new Set([...el("evidence").querySelectorAll("details[open]")].map(item => item.firstChild.textContent));
+  el("evidence").replaceChildren(...Object.entries(entries).map(([title, value]) => {
+    const detail = node("details", "");
+    detail.open = opened.has(title);
+    detail.append(node("summary", title), node("pre", display(value)));
+    return detail;
+  }));
+}
+async function stream(id) {
+  streamController?.abort();
+  const controller = new AbortController();
+  streamController = controller;
+  try {
+    const response = await fetch("/api/v1/ops/applications/" + encodeURIComponent(id) + "/events",
+                                 {headers:headers(false), signal:controller.signal});
+    if (!response.ok) return;
+    const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
+    for (;;) {
+      const {done, value} = await reader.read();
+      if (done) break;
+      if (value.includes("data:")) await refreshDetail();
+    }
+  } catch (error) {
+    if (error.name !== "AbortError") el("status").textContent = "Live updates disconnected. Use Load detail to refresh.";
+  }
+}
+async function merchantStatus() {
+  const value = await call(merchantPath(), "GET", undefined, true);
+  infoId = value.info_request_id;
+  show("merchant-output", value);
+}
+async function act(action) {
+  el("status").className = "";
+  el("status").textContent = "";
+  try {
+    await action();
+    el("status").textContent = "Updated";
+  } catch (error) {
+    el("status").className = "error";
+    el("status").textContent = error.message;
+  }
+}
+const bind = (id, action) => el(id).onclick = () => act(action);
+bind("run", async () => {
+  const result = await call("/ops/simulate/scenario", "POST", {name:el("scenario").value, owner:el("merchant").value});
+  await selectApp(result.id);
+  await refreshQueue();
+});
+bind("queue", refreshQueue);
+bind("detail", async () => {await refreshDetail(); stream(appId());});
+bind("merchant-read", merchantStatus);
+bind("draft", async () => {
+  const result = await call("/applications", "POST", formJson("merchant-json"), true);
+  el("application-id").value = result.id;
+  await merchantStatus();
+});
+bind("submit", async () => {await call(merchantPath()+"/submit", "POST", {}, true); await merchantStatus();});
+bind("withdraw", async () => {await call(merchantPath()+"/withdraw", "POST", {}, true); await merchantStatus();});
+bind("respond", async () => {
+  if (!infoId) await merchantStatus();
+  if (!infoId) throw Error("There is no open information request.");
+  await call(merchantPath()+"/info-requests/"+encodeURIComponent(infoId)+"/respond", "POST", formJson("merchant-json"), true);
+  await merchantStatus();
+});
+bind("bank-change", async () => {
+  await call(merchantPath()+"/change-requests", "POST", {change_type:"BANK_ACCOUNT_CHANGED", fields:formJson("merchant-json")}, true);
+  await merchantStatus();
+});
+bind("upload", async () => {
+  const file = el("doc-file").files[0];
+  let data = {doc_type:el("doc-type").value, payload:formJson("merchant-json")};
+  if (file) {
+    const parts = new FormData();
+    parts.set("doc_type", data.doc_type);
+    parts.set("payload", JSON.stringify(data.payload));
+    parts.set("file", file);
+    data = parts;
+  }
+  show("merchant-output", await call(merchantPath()+"/documents", "POST", data, true));
+});
+bind("claim", async () => {await call("/ops/review-tasks/"+taskId()+"/claim", "POST", {}); await refreshDetail();});
+bind("decide", async () => {
+  const payload = {...formJson("review-extra"), decision:el("decision").value,
+                   reason_codes:el("reason").value.split(",").map(x => x.trim()).filter(Boolean), notes:el("notes").value};
+  await call("/ops/review-tasks/"+taskId()+"/decide", "POST", payload);
+  await refreshDetail();
+});
+bind("retry", async () => {await call(opsPath()+"/provisioning/retry", "POST", {clear_simulation:true}); await refreshDetail();});
+for (const [button, path] of Object.entries({metrics:"/ops/metrics",audit:"/ops/audit/verify",dead:"/ops/dead-letters"}))
+  bind(button, async () => show("reports", await call(path)));
+bind("config-read", async () => {el("config-value").value = display(await call("/ops/config"));});
+bind("config-save", async () => show("reports", await call("/ops/config", "PUT", formJson("config-value"))));
+refreshQueue().catch(error => {el("status").textContent = error.message;});
+</script>
+</body>
+</html>

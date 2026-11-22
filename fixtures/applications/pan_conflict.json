@@ -1,0 +1,82 @@
+{
+  "application": {
+    "business_type": "PRIVATE_LIMITED",
+    "business_category": "RETAIL",
+    "legal_name": "Demo Tamarind Private Limited",
+    "declared_pan": "ZZZCZ1003Z",
+    "registered_address": {
+      "line1": "13 Demo Way",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "state_code": "27",
+      "pincode": "411103"
+    },
+    "contact": {
+      "name": "Tamarind Test Contact",
+      "email": "pan_conflict@example.com",
+      "phone": "+919000000003"
+    },
+    "persons": [
+      {
+        "role": "AUTHORISED_SIGNATORY",
+        "full_name": "Tamarind Test Signatory"
+      }
+    ],
+    "bank_account": {
+      "account_number": "900000000003",
+      "ifsc": "DEMO0001234",
+      "account_holder_name": "Demo Tamarind Private Limited",
+      "account_type": "CURRENT"
+    },
+    "annual_turnover_inr": 2000000,
+    "declared_gstin": "27ZZZCZ1003Z1ZW",
+    "declared_cin": "U00000MH2020PTC111003"
+  },
+  "documents": [
+    {
+      "doc_type": "PAN_CARD",
+      "payload": {
+        "pan": "ZZZCZ1030Z",
+        "name": "Demo Tamarind Private Limited"
+      }
+    },
+    {
+      "doc_type": "BANK_PROOF",
+      "payload": {
+        "account_number": "900000000003",
+        "ifsc": "DEMO0001234",
+        "account_holder_name": "Demo Tamarind Private Limited",
+        "account_type": "CURRENT"
+      }
+    },
+    {
+      "doc_type": "GST_CERTIFICATE",
+      "payload": {
+        "gstin": "27ZZZCZ1003Z1ZW",
+        "legal_name": "Demo Tamarind Private Limited"
+      }
+    },
+    {
+      "doc_type": "INCORPORATION_CERT",
+      "payload": {
+        "cin": "U00000MH2020PTC111003",
+        "company_name": "Demo Tamarind Private Limited",
+        "date_of_incorporation": "2020-01-01"
+      }
+    },
+    {
+      "doc_type": "MOA_AOA",
+      "payload": {
+        "company_name": "Demo Tamarind Private Limited"
+      }
+    },
+    {
+      "doc_type": "BOARD_RESOLUTION",
+      "payload": {
+        "company_name": "Demo Tamarind Private Limited",
+        "authorised_signatory": "Tamarind Test Signatory"
+      }
+    }
+  ],
+  "simulate": {}
+}

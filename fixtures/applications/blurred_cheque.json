@@ -1,0 +1,62 @@
+{
+  "application": {
+    "business_type": "PROPRIETORSHIP",
+    "business_category": "RETAIL",
+    "legal_name": "Demo Cumin",
+    "declared_pan": "ZZZPZ1002Z",
+    "registered_address": {
+      "line1": "12 Demo Way",
+      "city": "Pune",
+      "state": "Maharashtra",
+      "state_code": "27",
+      "pincode": "411102"
+    },
+    "contact": {
+      "name": "Cumin Test Contact",
+      "email": "blurred_cheque@example.com",
+      "phone": "+919000000002"
+    },
+    "persons": [
+      {
+        "role": "AUTHORISED_SIGNATORY",
+        "full_name": "Cumin Test Signatory"
+      }
+    ],
+    "bank_account": {
+      "account_number": "900000000002",
+      "ifsc": "DEMO0001234",
+      "account_holder_name": "Demo Cumin",
+      "account_type": "CURRENT"
+    },
+    "annual_turnover_inr": 2000000
+  },
+  "documents": [
+    {
+      "doc_type": "PAN_CARD",
+      "payload": {
+        "pan": "ZZZPZ1002Z",
+        "name": "Demo Cumin"
+      }
+    },
+    {
+      "doc_type": "BANK_PROOF",
+      "payload": {
+        "account_number": "900000000002",
+        "ifsc": "DEMO0001234",
+        "account_holder_name": "Demo Cumin",
+        "account_type": "CURRENT"
+      },
+      "simulate": {
+        "quality_score": 0.4
+      }
+    },
+    {
+      "doc_type": "ADDRESS_PROOF",
+      "payload": {
+        "address": "12 Demo Way",
+        "issue_date": "2026-11-01"
+      }
+    }
+  ],
+  "simulate": {}
+}

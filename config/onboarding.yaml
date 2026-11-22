@@ -1,0 +1,87 @@
+onboarding:
+  required_checks:
+    PROPRIETORSHIP:   [PAN, BANK, RISK]
+    PARTNERSHIP:      [PAN, GST, BANK, RISK]
+    LLP:              [PAN, GST, BANK, RISK, MCA]
+    PRIVATE_LIMITED:  [PAN, GST, BANK, RISK, MCA]
+    PUBLIC_LIMITED:   [PAN, GST, BANK, RISK, MCA]
+    TRUST_SOCIETY_NGO: [PAN, BANK, RISK]
+    INDIVIDUAL:       [PAN, BANK, RISK]
+    HUF:              [PAN, BANK, RISK]
+  gst_required_if:
+    annual_turnover_inr_gte: 4000000
+    or_business_category_in: [ECOMMERCE_SELLER, INTERSTATE_SUPPLY]
+
+  required_documents:
+    PROPRIETORSHIP:   [PAN_CARD, BANK_PROOF, ADDRESS_PROOF]
+    PARTNERSHIP:      [PAN_CARD, GST_CERTIFICATE, PARTNERSHIP_DEED, BANK_PROOF]
+    LLP:              [PAN_CARD, GST_CERTIFICATE, LLP_AGREEMENT, INCORPORATION_CERT, BANK_PROOF]
+    PRIVATE_LIMITED:  [PAN_CARD, GST_CERTIFICATE, INCORPORATION_CERT, MOA_AOA, BOARD_RESOLUTION, BANK_PROOF]
+    PUBLIC_LIMITED:   [PAN_CARD, GST_CERTIFICATE, INCORPORATION_CERT, MOA_AOA, BOARD_RESOLUTION, BANK_PROOF]
+    HUF:              [PAN_CARD, BANK_PROOF, ADDRESS_PROOF]
+    INDIVIDUAL:       [PAN_CARD, BANK_PROOF]
+    TRUST_SOCIETY_NGO: [PAN_CARD, TRUST_DEED, REGISTRATION_CERT, BANK_PROOF]
+  extraction:
+    mode: structured_only
+    model: null
+    field_confidence_auto_accept: 0.90
+    field_confidence_review: 0.70
+    doc_quality_min_score: 0.60
+    max_pages_per_doc: 10
+    max_file_mb: 10
+    allowed_mime: [application/pdf, image/jpeg, image/png]
+  name_match:
+    algorithm: token_set_ratio
+    pass_threshold: 0.85
+    review_threshold: 0.70
+    normalize: [lowercase, strip_salutations, strip_legal_suffix, collapse_spaces]
+    legal_suffixes: ["pvt ltd","private limited","llp","ltd","limited","& co","and co"]
+  providers:
+    PAN:  { mode: async, timeout_sec: 120, max_attempts: 3, backoff: exponential, base_delay_sec: 5 }
+    GST:  { mode: async, timeout_sec: 180, max_attempts: 3, backoff: exponential, base_delay_sec: 10 }
+    BANK: { mode: async, timeout_sec: 300, max_attempts: 2, backoff: fixed,       base_delay_sec: 30 }
+    RISK: { mode: async, timeout_sec: 240, max_attempts: 3, backoff: exponential, base_delay_sec: 10 }
+    MCA:  { mode: sync,  timeout_sec: 15,  max_attempts: 3, backoff: exponential, base_delay_sec: 2 }
+    MID:  { mode: sync,  timeout_sec: 20,  max_attempts: 5, backoff: exponential, base_delay_sec: 2 }
+  late_callback_policy: accept_if_not_terminal
+  callback_signature: hmac_sha256
+  callback_clock_skew_sec: 300
+  risk:
+    auto_approve_max_score: 40
+    manual_review_max_score: 75
+    hard_reject_flags: [SANCTIONS_HIT, PEP_UNDECLARED, BLACKLISTED_ENTITY]
+    high_risk_mcc: ["7995", "5967", "5993", "6051", "4829"]
+    high_risk_mcc_action: MANUAL_REVIEW
+  duplicate_detection:
+    enabled: true
+    exact_keys: [pan, gstin, bank_account_hash]
+    fuzzy: { business_name_threshold: 0.92, address_threshold: 0.85, phone_exact: true, email_exact: true }
+    action_on_exact_active_merchant: BLOCK
+    action_on_exact_inflight_application: MERGE_PROMPT
+    action_on_fuzzy: REVIEW
+  info_request:
+    expiry_policy: expire
+    max_rounds: 3
+    response_sla_hours: 72
+    reminder_hours: [24, 48]
+  review:
+    sla_hours: { HIGH: 4, MEDIUM: 24, LOW: 48 }
+    four_eyes_required_for: [RISK_OVERRIDE, HARD_REJECT_OVERRIDE, BANK_CHANGE_AFTER_APPROVAL]
+    auto_assign: round_robin
+  provisioning:
+    mid_format: "PL{state_code}{yyMM}{seq:06d}"
+    capabilities_by_category:
+      DEFAULT: [CARD_PRESENT, UPI]
+      ECOMMERCE_SELLER: [CARD_NOT_PRESENT, UPI, NETBANKING]
+    compensation_on_capability_failure: retry_then_partial
+  reverification_triggers:
+    BANK_ACCOUNT_CHANGED: [BANK]
+    LEGAL_NAME_CHANGED:   [PAN, GST, BANK, RISK]
+    GSTIN_CHANGED:        [GST]
+    AUTHORISED_SIGNATORY_CHANGED: [PAN, RISK]
+    ADDRESS_CHANGED:      []
+  pii:
+    mask_in_logs: true
+    encrypt_at_rest_fields: [pan, bank_account_number, aadhaar_last4, dob]
+    send_raw_pii_to_llm: false
+    doc_retention_days: 2555
